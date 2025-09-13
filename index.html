@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Notes App</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide-react@0.292.0/dist/lucide-react.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          },
+        },
+      }
+    </script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Basic styles for Lucide icons */
+        .lucide {
+            width: 1rem;
+            height: 1rem;
+            stroke-width: 2px;
+        }
+        /* Styles for Study Mode Highlights */
+        #note-display-content mark {
+            background-color: #fef08a; /* yellow-200 */
+            border-radius: 3px;
+            padding: 0 2px;
+        }
+        /* Simple toggle switch styles */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 24px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #4f46e5; /* indigo-600 */
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(16px);
+        }
+        /* AI Q&A Panel styles */
+        #qa-panel {
+            transition: transform 0.3s ease-in-out;
+        }
+        /* Flashcard styles */
+        #flashcard-modal {
+             backdrop-filter: blur(4px);
+        }
+        .flashcard {
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+        .flashcard.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .flashcard-face {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .flashcard-back {
+            transform: rotateY(180deg);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans antialiased text-slate-800 overflow-hidden">
+
+    <!-- Main Application Container -->
+    <div id="app" class="flex h-screen w-full relative">
+
+        <!-- Sidebar -->
+        <aside id="sidebar" class="bg-white w-full max-w-xs flex flex-col border-r border-slate-200 transition-all duration-300 z-10">
+            <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+                <h1 class="text-xl font-bold text-slate-900">AI Notes</h1>
+                <button id="new-note-btn" class="flex items-center gap-2 bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    <span>New Note</span>
+                </button>
+            </div>
+            <div id="notes-list-container" class="flex-1 overflow-y-auto">
+                <!-- Notes will be dynamically inserted here -->
+            </div>
+             <div class="p-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-500 overflow-hidden">
+                <p class="font-semibold truncate">User ID:</p>
+                <p id="user-id-display" class="truncate">Not signed in</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main id="main-content" class="flex-1 flex flex-col transition-opacity duration-300 opacity-0">
+            <!-- Editor View (shown when a note is selected) -->
+            <div id="editor-view" class="flex flex-col h-full hidden">
+                <div class="p-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row flex-wrap items-center justify-between gap-4">
+                     <input type="text" id="note-title" class="text-xl font-bold text-slate-900 focus:outline-none w-full sm:w-auto flex-grow bg-transparent" placeholder="Note Title...">
+                    <div id="actions-toolbar" class="flex items-center gap-4 flex-wrap">
+                        <!-- Study Mode Toggle -->
+                        <div class="flex items-center gap-2">
+                             <svg class="lucide text-slate-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H2v15h7v3h2V3h2v3h6V3h-6V0h-2v3z"/><path d="M8 15h13V6H8v9z"/></svg>
+                            <span class="text-sm font-medium text-slate-600">Study Mode</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="study-mode-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                         <button id="open-qa-btn" class="ai-btn flex items-center gap-2 bg-indigo-100 text-indigo-700 font-medium px-3 py-2 rounded-lg hover:bg-indigo-200 transition-colors duration-200">
+                           <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            <span>Ask Note ✨</span>
+                        </button>
+                         <button id="generate-flashcards-btn" class="ai-btn flex items-center gap-2 bg-indigo-100 text-indigo-700 font-medium px-3 py-2 rounded-lg hover:bg-indigo-200 transition-colors duration-200">
+                           <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                            <span>Generate Flashcards ✨</span>
+                        </button>
+                        <div id="ai-actions" class="flex items-center gap-2 flex-wrap">
+                            <button data-action="summarize" class="ai-btn">Summarize</button>
+                            <button data-action="expand" class="ai-btn">Expand</button>
+                            <button data-action="fix" class="ai-btn">Fix Grammar</button>
+                        </div>
+                        <button id="highlight-btn" class="hidden ai-btn flex items-center gap-2 bg-yellow-300 text-yellow-800 font-medium px-3 py-2 rounded-lg hover:bg-yellow-400 transition-colors duration-200">
+                            <span>Highlight Points</span>
+                        </button>
+                         <button id="delete-note-btn" class="flex items-center gap-2 bg-red-500 text-white font-medium px-3 py-2 rounded-lg hover:bg-red-600 transition-colors duration-200 ml-auto">
+                            <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="relative flex-1">
+                    <textarea id="note-editor" class="absolute inset-0 w-full h-full p-6 text-base bg-white focus:outline-none resize-none" placeholder="Start writing your note here..."></textarea>
+                    <div id="note-display-content" class="hidden w-full h-full p-6 text-base bg-white overflow-y-auto prose max-w-none"></div>
+                </div>
+                 <div id="status-bar" class="bg-white p-2 border-t border-slate-200 text-sm text-slate-500 h-10 flex items-center">
+                    <p id="status-text">Ready</p>
+                </div>
+            </div>
+
+            <!-- Placeholder (shown when no note is selected) -->
+            <div id="placeholder-view" class="flex-1 flex flex-col items-center justify-center text-center p-8 bg-slate-50">
+                <svg class="lucide text-slate-400 mb-4" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <h2 class="text-2xl font-bold text-slate-600">Select a note to get started</h2>
+                <p class="text-slate-500 mt-2">Or, create a new note to begin capturing your ideas.</p>
+            </div>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div id="loader-overlay" class="hidden absolute inset-0 bg-white/70 z-50 flex items-center justify-center">
+             <div class="flex flex-col items-center justify-center">
+                <svg class="animate-spin h-10 w-10 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p id="loader-text" class="mt-4 text-slate-600 font-semibold text-lg">Processing...</p>
+            </div>
+        </div>
+
+        <!-- AI Q&A Panel -->
+        <div id="qa-panel" class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-2xl rounded-t-xl z-20 transform translate-y-full">
+            <div class="max-w-4xl mx-auto p-4 flex flex-col h-[60vh]">
+                <div class="flex items-center justify-between pb-3 border-b">
+                    <h3 class="text-lg font-bold text-slate-800">✨ Ask Your Note</h3>
+                    <button id="close-qa-btn" class="p-1 rounded-full hover:bg-slate-200">
+                        <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div id="chat-history" class="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
+                    <!-- Chat messages will be added here -->
+                </div>
+                <form id="qa-form" class="mt-4 flex items-center gap-3">
+                    <input type="text" id="qa-input" class="flex-1 w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Ask a question about your note..." autocomplete="off">
+                    <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+                        <span>Send</span>
+                        <svg class="lucide w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Flashcard Modal -->
+        <div id="flashcard-modal" class="hidden absolute inset-0 bg-slate-900/50 z-40 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 relative">
+                <button id="close-flashcard-btn" class="absolute top-4 right-4 p-1 rounded-full hover:bg-slate-200 z-10">
+                     <svg class="lucide" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <div class="relative h-80 w-full cursor-pointer perspective-1000" id="flashcard-container">
+                    <div class="flashcard relative w-full h-full">
+                        <div id="flashcard-front" class="flashcard-face absolute w-full h-full bg-slate-100 rounded-xl flex items-center justify-center p-6 text-center">
+                            <p class="text-2xl font-semibold text-slate-800"></p>
+                        </div>
+                        <div id="flashcard-back" class="flashcard-face flashcard-back absolute w-full h-full bg-indigo-500 rounded-xl flex items-center justify-center p-6 text-center">
+                             <p class="text-xl font-medium text-white"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex items-center justify-between">
+                     <button id="prev-flashcard-btn" class="px-4 py-2 rounded-lg hover:bg-slate-100">&larr; Previous</button>
+                     <p id="flashcard-counter" class="text-sm font-medium text-slate-500">1 / 10</p>
+                     <button id="next-flashcard-btn" class="px-4 py-2 rounded-lg hover:bg-slate-100">Next &rarr;</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // --- Firebase and App Initialization ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // --- Global Config and State ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAdTZVsouRfJSe2SaNYRht-Lh7jZYHgGn4",
+            authDomain: "ai-notes-app-471dd.firebaseapp.com",
+            projectId: "ai-notes-app-471dd",
+            storageBucket: "ai-notes-app-471dd.firebasestorage.app",
+            messagingSenderId: "761426160010",
+            appId: "1:761426160010:web:821dc57d63e6419c4bc073",
+            measurementId: "G-SJJCVB7M9T"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-ai-notes-app';
+
+        let db, auth, userId;
+        let notes = [];
+        let flashcards = [];
+        let currentFlashcardIndex = 0;
+        let selectedNoteId = null;
+        let unsubscribeNotes = null;
+        let debounceTimer;
+        let isStudyMode = false;
+
+        // --- DOM Elements ---
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('main-content');
+        const notesListContainer = document.getElementById('notes-list-container');
+        const newNoteBtn = document.getElementById('new-note-btn');
+        const editorView = document.getElementById('editor-view');
+        const placeholderView = document.getElementById('placeholder-view');
+        const noteTitle = document.getElementById('note-title');
+        const noteEditor = document.getElementById('note-editor');
+        const noteDisplayContent = document.getElementById('note-display-content');
+        const aiActionsContainer = document.getElementById('ai-actions');
+        const deleteNoteBtn = document.getElementById('delete-note-btn');
+        const loaderOverlay = document.getElementById('loader-overlay');
+        const loaderText = document.getElementById('loader-text');
+        const statusText = document.getElementById('status-text');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const studyModeToggle = document.getElementById('study-mode-toggle');
+        const highlightBtn = document.getElementById('highlight-btn');
+        const qaPanel = document.getElementById('qa-panel');
+        const openQaBtn = document.getElementById('open-qa-btn');
+        const closeQaBtn = document.getElementById('close-qa-btn');
+        const qaForm = document.getElementById('qa-form');
+        const qaInput = document.getElementById('qa-input');
+        const chatHistory = document.getElementById('chat-history');
+        const generateFlashcardsBtn = document.getElementById('generate-flashcards-btn');
+        const flashcardModal = document.getElementById('flashcard-modal');
+        const closeFlashcardBtn = document.getElementById('close-flashcard-btn');
+        const flashcardContainer = document.getElementById('flashcard-container');
+        const flashcard = flashcardContainer.querySelector('.flashcard');
+        const flashcardFront = document.getElementById('flashcard-front').querySelector('p');
+        const flashcardBack = document.getElementById('flashcard-back').querySelector('p');
+        const prevFlashcardBtn = document.getElementById('prev-flashcard-btn');
+        const nextFlashcardBtn = document.getElementById('next-flashcard-btn');
+        const flashcardCounter = document.getElementById('flashcard-counter');
+
+        // --- UI Functions ---
+        const showLoader = (text = "Processing...") => {
+            loaderText.textContent = text;
+            loaderOverlay.classList.remove('hidden');
+        };
+        const hideLoader = () => loaderOverlay.classList.add('hidden');
+
+        const updateStatus = (text) => {
+            statusText.textContent = text;
+            setTimeout(() => {
+                if(statusText.textContent === text) statusText.textContent = "Ready";
+            }, 3000);
+        }
+        
+        const toggleStudyMode = () => {
+            isStudyMode = studyModeToggle.checked;
+            if (isStudyMode) {
+                sidebar.classList.add('-translate-x-full');
+                aiActionsContainer.classList.add('hidden');
+                openQaBtn.classList.add('hidden');
+                generateFlashcardsBtn.classList.add('hidden');
+                highlightBtn.classList.remove('hidden');
+                
+                noteEditor.classList.add('hidden');
+                noteDisplayContent.classList.remove('hidden');
+                noteDisplayContent.innerHTML = noteEditor.value.replace(/\n/g, '<br>');
+
+                noteTitle.disabled = true;
+            } else {
+                sidebar.classList.remove('-translate-x-full');
+                aiActionsContainer.classList.remove('hidden');
+                openQaBtn.classList.remove('hidden');
+                generateFlashcardsBtn.classList.remove('hidden');
+                highlightBtn.classList.add('hidden');
+
+                noteEditor.classList.remove('hidden');
+                noteDisplayContent.classList.add('hidden');
+                
+                noteTitle.disabled = false;
+            }
+        };
+
+        const renderNotesList = () => {
+            const sortedNotes = [...notes].sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+            notesListContainer.innerHTML = sortedNotes.length === 0 
+                ? `<div class="text-center p-8 text-slate-500"><p>No notes yet.</p><p>Click "New Note" to start.</p></div>`
+                : sortedNotes.map(note => `
+                    <div class="note-item p-4 border-b border-slate-200 cursor-pointer hover:bg-slate-100 ${note.id === selectedNoteId ? 'bg-indigo-50 border-r-4 border-indigo-500' : ''}" data-id="${note.id}">
+                        <h3 class="font-semibold text-slate-800 truncate">${note.title || "Untitled Note"}</h3>
+                        <p class="text-sm text-slate-500 truncate mt-1">${note.content ? note.content.trim().substring(0, 50) + '...' : "No content"}</p>
+                    </div>
+                `).join('');
+        };
+
+        const displayNoteContent = () => {
+            if (studyModeToggle.checked) {
+                studyModeToggle.checked = false;
+                toggleStudyMode();
+            }
+
+            if (selectedNoteId) {
+                const note = notes.find(n => n.id === selectedNoteId);
+                if (note) {
+                    noteTitle.value = note.title || '';
+                    noteEditor.value = note.content || '';
+                    placeholderView.classList.add('hidden');
+                    editorView.classList.remove('hidden');
+                }
+            } else {
+                placeholderView.classList.remove('hidden');
+                editorView.classList.add('hidden');
+            }
+        };
+        
+        const updateUI = () => {
+            renderNotesList();
+            displayNoteContent();
+        };
+
+        // --- Q&A Panel Functions ---
+        const toggleQaPanel = (show) => {
+            if(show) {
+                qaPanel.classList.remove('translate-y-full');
+            } else {
+                qaPanel.classList.add('translate-y-full');
+            }
+        };
+
+        const addMessageToChat = (sender, message) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `p-3 rounded-lg max-w-[80%] ${sender === 'user' ? 'bg-indigo-500 text-white self-end' : 'bg-slate-200 text-slate-800 self-start'}`;
+            messageDiv.innerHTML = message; // Use innerHTML to render line breaks
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            return messageDiv;
+        };
+        
+        // --- Flashcard Functions ---
+        const toggleFlashcardModal = (show) => {
+            if (show) {
+                flashcardModal.classList.remove('hidden');
+            } else {
+                flashcardModal.classList.add('hidden');
+            }
+        };
+
+        const renderCurrentFlashcard = () => {
+            if (flashcards.length === 0) return;
+            const card = flashcards[currentFlashcardIndex];
+            flashcardFront.textContent = card.question;
+            flashcardBack.textContent = card.answer;
+            flashcardCounter.textContent = `${currentFlashcardIndex + 1} / ${flashcards.length}`;
+            flashcard.classList.remove('is-flipped');
+        };
+
+
+        // --- Firestore Functions ---
+        const fetchNotes = () => {
+            if (unsubscribeNotes) unsubscribeNotes();
+            const notesCollection = collection(db, `artifacts/${appId}/users/${userId}/notes`);
+            unsubscribeNotes = onSnapshot(query(notesCollection), (snapshot) => {
+                notes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateUI();
+            }, (error) => console.error("Error fetching notes:", error));
+        };
+
+        const createNote = async () => {
+            showLoader("Creating new note...");
+            try {
+                const newNoteRef = await addDoc(collection(db, `artifacts/${appId}/users/${userId}/notes`), {
+                    title: "Untitled Note",
+                    content: "",
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                });
+                selectedNoteId = newNoteRef.id;
+                updateStatus("New note created.");
+                updateUI(); 
+            } catch (error) {
+                console.error("Error creating note:", error);
+            } finally {
+                hideLoader();
+            }
+        };
+
+        const updateNote = async (noteId, data) => {
+            if (!noteId) return;
+            try {
+                await updateDoc(doc(db, `artifacts/${appId}/users/${userId}/notes`, noteId), { ...data, updatedAt: serverTimestamp() });
+                updateStatus("Note saved.");
+            } catch (error) {
+                console.error("Error updating note:", error);
+            }
+        };
+
+        const deleteNote = async () => {
+             if (!selectedNoteId) return;
+             showLoader("Deleting note...");
+             try {
+                const deletedNoteId = selectedNoteId;
+                await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/notes`, selectedNoteId));
+                notes = notes.filter(note => note.id !== deletedNoteId);
+                selectedNoteId = notes.length > 0 ? [...notes].sort((a,b) => (b.updatedAt?.seconds||0) - (a.updatedAt?.seconds||0))[0].id : null;
+                updateStatus("Note deleted.");
+                updateUI();
+             } catch (error) {
+                 console.error("Error deleting note:", error);
+             } finally {
+                 hideLoader();
+             }
+        };
+
+        // --- Gemini API Function ---
+        const callGeminiAPI = async (prompt, content, schema = null) => {
+            const model = 'gemini-2.5-flash-preview-05-20';
+            // IMPORTANT: PASTE YOUR GEMINI API KEY HERE
+            const apiKey = "AIzaSyCmFoD0t6NUle546ebjyixE60dyyPJ-foo"; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+            if (apiKey === "YOUR_GEMINI_API_KEY_HERE") {
+                updateStatus("Error: Add your Gemini API Key.");
+                return null;
+            }
+
+            const payload = {
+                contents: [{ parts: [{ text: `${prompt}:\n\n---\n\n${content}` }] }],
+                ...(schema && {
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: schema
+                    }
+                })
+            };
+            
+            for (let i = 0; i < 5; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (text) return schema ? JSON.parse(text) : text;
+                    throw new Error("Invalid response structure from Gemini API.");
+                } catch (error) {
+                    console.error(`Gemini API call attempt ${i + 1} failed:`, error);
+                    if (i === 4) { updateStatus("Error: AI Assistant failed."); return null; }
+                    await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+                }
+            }
+        };
+        
+        const handleAiAction = async (action) => {
+            if (!selectedNoteId) return;
+            const currentContent = noteEditor.value;
+            if (!currentContent.trim()) { updateStatus("Cannot perform AI action on an empty note."); return; }
+            let prompt, loaderMsg;
+            switch(action) {
+                case 'summarize': prompt = "Summarize the following text into a concise paragraph"; loaderMsg = "Summarizing..."; break;
+                case 'expand': prompt = "Expand on the following points, adding more detail and context"; loaderMsg = "Expanding..."; break;
+                case 'fix': prompt = "Correct any spelling and grammatical errors in the following text. Only output the corrected text."; loaderMsg = "Fixing grammar..."; break;
+                default: return;
+            }
+            showLoader(loaderMsg);
+            const newContent = await callGeminiAPI(prompt, currentContent);
+            hideLoader();
+            if (newContent) {
+                noteEditor.value = newContent;
+                await updateNote(selectedNoteId, { content: newContent });
+                updateStatus(`AI action '${action}' completed.`);
+            }
+        };
+
+        const handleHighlight = async () => {
+            const currentContent = noteEditor.value;
+            if (!currentContent.trim()) { updateStatus("Cannot highlight an empty note."); return; }
+            showLoader("Highlighting key points...");
+            const prompt = "Analyze the following text and identify the most important, key sentences that summarize the main points. Return these sentences as a JSON array of strings.";
+            const schema = { type: "ARRAY", items: { type: "STRING" } };
+            const keySentences = await callGeminiAPI(prompt, currentContent, schema);
+            hideLoader();
+            if (keySentences && Array.isArray(keySentences)) {
+                let highlightedContent = currentContent;
+                keySentences.forEach(sentence => {
+                    highlightedContent = highlightedContent.replace(new RegExp(sentence.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), `<mark>${sentence}</mark>`);
+                });
+                noteDisplayContent.innerHTML = highlightedContent.replace(/\n/g, '<br>');
+                updateStatus("Highlights generated.");
+            }
+        };
+
+        const handleGenerateFlashcards = async () => {
+            const currentContent = noteEditor.value;
+            if (!currentContent.trim()) { updateStatus("Cannot generate flashcards for an empty note."); return; }
+            showLoader("Generating flashcards...");
+            const prompt = "Analyze the following text and generate a list of question and answer pairs that could be used as flashcards for studying. Return the result as a JSON array of objects, where each object has a 'question' and 'answer' key.";
+            const schema = { type: "ARRAY", items: { type: "OBJECT", properties: { "question": { "type": "STRING" }, "answer": { "type": "STRING" }}, required: ["question", "answer"] }};
+            const generatedCards = await callGeminiAPI(prompt, currentContent, schema);
+            hideLoader();
+
+            if (generatedCards && Array.isArray(generatedCards) && generatedCards.length > 0) {
+                flashcards = generatedCards;
+                currentFlashcardIndex = 0;
+                renderCurrentFlashcard();
+                toggleFlashcardModal(true);
+            } else {
+                updateStatus("Could not generate flashcards from this note.");
+            }
+        };
+
+        const handleQuestionSubmit = async (e) => {
+            e.preventDefault();
+            const question = qaInput.value.trim();
+            if (!question || !selectedNoteId) return;
+            
+            const currentNote = notes.find(n => n.id === selectedNoteId);
+            if(!currentNote || !currentNote.content.trim()){
+                 updateStatus("Cannot ask questions about an empty note.");
+                 return;
+            }
+
+            addMessageToChat('user', question);
+            qaInput.value = '';
+            const thinkingMessage = addMessageToChat('ai', '<span class="italic">Thinking...</span>');
+            
+            const prompt = `You are a helpful study assistant. Based ONLY on the document provided below, answer the user's question. If the answer cannot be found in the document, respond with "I'm sorry, but I cannot find the answer to that question in this note." Do not use any outside knowledge.`;
+            const content = `DOCUMENT:\n${currentNote.content}\n\nQUESTION:\n${question}`;
+            
+            const answer = await callGeminiAPI(prompt, content);
+            
+            if (answer) {
+                thinkingMessage.innerHTML = answer.replace(/\n/g, '<br>');
+            } else {
+                thinkingMessage.innerHTML = "There was an error getting a response from the AI.";
+            }
+        };
+
+        // --- Event Listeners & Auto-Save ---
+        const debouncedSave = () => {
+            clearTimeout(debounceTimer);
+            updateStatus("Typing...");
+            debounceTimer = setTimeout(() => {
+                if (selectedNoteId) {
+                    const currentNote = notes.find(n => n.id === selectedNoteId);
+                    const newTitle = noteTitle.value;
+                    const newContent = noteEditor.value;
+                    if (currentNote && (currentNote.title !== newTitle || currentNote.content !== newContent)) {
+                       updateNote(selectedNoteId, { title: newTitle, content: newContent });
+                    } else {
+                        updateStatus("Ready");
+                    }
+                }
+            }, 750); 
+        };
+
+        newNoteBtn.addEventListener('click', createNote);
+        deleteNoteBtn.addEventListener('click', deleteNote);
+        notesListContainer.addEventListener('click', (e) => {
+            const noteItem = e.target.closest('.note-item');
+            if (noteItem) { selectedNoteId = noteItem.dataset.id; updateUI(); }
+        });
+        noteTitle.addEventListener('input', debouncedSave);
+        noteEditor.addEventListener('input', debouncedSave);
+        aiActionsContainer.addEventListener('click', (e) => {
+            const button = e.target.closest('.ai-btn');
+            if (button && button.dataset.action) {
+                handleAiAction(button.dataset.action);
+            }
+        });
+        studyModeToggle.addEventListener('change', toggleStudyMode);
+        highlightBtn.addEventListener('click', handleHighlight);
+        openQaBtn.addEventListener('click', () => toggleQaPanel(true));
+        closeQaBtn.addEventListener('click', () => toggleQaPanel(false));
+        qaForm.addEventListener('submit', handleQuestionSubmit);
+        generateFlashcardsBtn.addEventListener('click', handleGenerateFlashcards);
+        closeFlashcardBtn.addEventListener('click', () => toggleFlashcardModal(false));
+        flashcardContainer.addEventListener('click', () => flashcard.classList.toggle('is-flipped'));
+        prevFlashcardBtn.addEventListener('click', () => {
+            if (currentFlashcardIndex > 0) {
+                currentFlashcardIndex--;
+                renderCurrentFlashcard();
+            }
+        });
+        nextFlashcardBtn.addEventListener('click', () => {
+            if (currentFlashcardIndex < flashcards.length - 1) {
+                currentFlashcardIndex++;
+                renderCurrentFlashcard();
+            }
+        });
+
+        // --- Main Initialization ---
+        const initialize = async () => {
+            if (!firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("AIzaSyXXXXXXXXXXXXXXXXXX")) {
+                document.body.innerHTML = `<div class="p-4 text-red-600 bg-red-100 h-screen flex items-center justify-center text-center"><p><strong>Configuration Error:</strong><br>Please replace the placeholder firebaseConfig object in your index.html file with your actual Firebase project configuration.</p></div>`;
+                return;
+            }
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdDisplay.textContent = userId;
+                        mainContent.classList.remove('opacity-0');
+                        fetchNotes();
+                    } else {
+                        mainContent.classList.add('opacity-0');
+                        userId = null;
+                        if(unsubscribeNotes) unsubscribeNotes();
+                        notes = [];
+                        updateUI();
+                    }
+                });
+                await signInAnonymously(auth);
+            } catch(e) {
+                console.error("Initialization failed", e);
+                document.body.innerHTML = `<div class="p-4 text-red-600 bg-red-100 h-screen flex items-center justify-center"><p><strong>Fatal Error:</strong> Could not initialize the application. Check the console for details.</p></div>`;
+            }
+        };
+
+        initialize();
+    </script>
+</body>
+</html>
+
+
